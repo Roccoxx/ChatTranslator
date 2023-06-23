@@ -15,9 +15,9 @@ Este es un plugin que traduce cuando los jugadores envian un mensaje por say o s
 Consideré dos opciones, cURL y gRIP para realizar este plugin. Disfrutalo!
 
 # cURL version Requerimientos/Requirements
-https://github.com/Polarhigh/AmxxCurl
-TraductorChat.php
+## https://github.com/Polarhigh/AmxxCurl
+## TraductorChat.php
 
 # gRIP version Requerimientos/Requirements
-Required: https://github.com/In-line/grip or https://dev-cs.ru/resources/650/
-TraductorChatGRIP.php
+## https://github.com/In-line/grip or https://dev-cs.ru/resources/650/
+## TraductorChatGRIP.php
