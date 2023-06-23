@@ -21,3 +21,6 @@ Consideré dos opciones, cURL y gRIP para realizar este plugin. Disfrutalo!
 # gRIP version Requerimientos/Requirements
 ## https://github.com/In-line/grip or https://dev-cs.ru/resources/650/
 ## TraductorChatGRIP.php
+
+# Spanish thread for discussion
+## https://amxmodx-es.com/Thread-Traductor
