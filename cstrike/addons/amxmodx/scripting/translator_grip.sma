@@ -3,7 +3,15 @@
 #include <engine>
 #include <hamsandwich>
 #include <fakemeta>
-#include <curl>
+#include <grip>
+#include <json>
+
+#define IsPlayer(%0)            (1 <= %0 <= MAX_PLAYERS)
+
+#define GetPlayerBit(%0,%1)     (IsPlayer(%1) && (%0 & (1 << (%1 & 31))))
+#define SetPlayerBit(%0,%1)     (IsPlayer(%1) && (%0 |= (1 << (%1 & 31))))
+#define ClearPlayerBit(%0,%1)   (IsPlayer(%1) && (%0 &= ~(1 << (%1 & 31))))
+#define SwitchPlayerBit(%0,%1)  (IsPlayer(%1) && (%0 ^= (1 << (%1 & 31))))
 
 #pragma semicolon 1
 
@@ -11,7 +19,7 @@ new const PLUGIN_NAME[] = "Chat Translator";
 new const PLUGIN_VERSION[] = "1.0";
 new const PLUGIN_AUTHOR[] = "Roccoxx & hlstriker";
 
-new const TRANSLATOR_FILE[] = "http://localhost/ChatTranslation/TraductorChat.php";
+new const TRANSLATOR_FILE[] = "https://yourhostpijudo.com/extra/TraductorChatGRIP.php";
 
 new g_msgSayText, ConfigFile[64];
 
@@ -31,6 +39,9 @@ public plugin_init(){
     formatex(ConfigFile, charsmax(ConfigFile), "%s/TranslateSay.txt", ConfigFile);
 }
 
+/* =========================================================================================
+                                            LANGUAGE
+========================================================================================= */
 public ent_LangMenu(const iEnt){
     if(!is_valid_ent(iEnt)) return HAM_IGNORED;
 
@@ -53,7 +64,11 @@ public msg_SayText(iMsgID, iDest, iReceiver)
     
     static iSender; iSender = get_msg_arg_int(1);
 
-    if(iSender == iReceiver) return PLUGIN_CONTINUE;
+    if(iSender == iReceiver || is_user_bot(iReceiver)) return PLUGIN_CONTINUE;
+
+    static szText[193]; get_msg_arg_string(4, szText, sizeof(szText));
+
+    if(szText[0] == '/') return PLUGIN_CONTINUE;
     
     static szLangFrom[3], szLangTo[3];
     engfunc(EngFunc_InfoKeyValue, engfunc(EngFunc_GetInfoKeyBuffer, iSender), "lang", szLangFrom, sizeof(szLangFrom)-1);
@@ -76,80 +91,98 @@ public msg_SayText(iMsgID, iDest, iReceiver)
     if(equal(szLangFrom, "cz")) copy(szLangFrom, sizeof(szLangFrom), "cs");
     else if(equal(szLangTo, "cz")) copy(szLangTo, sizeof(szLangTo), "cs");
     
-    static szMsgType[64], szText[193];
+    static szMsgType[64];
     
-    get_msg_arg_string(2, szMsgType, sizeof(szMsgType)); get_msg_arg_string(4, szText, sizeof(szText));
+    get_msg_arg_string(2, szMsgType, sizeof(szMsgType));
     
     TranslateText(szText, szMsgType, szLangFrom, szLangTo, iSender, iReceiver);
     
     return PLUGIN_HANDLED;
 }
 
+/* =========================================================================================
+                                            GRIP
+=========================================================================================*/
+
 TranslateText(szText[193], const szMsgType[64], const szLangFrom[3], const szLangTo[3], iSender, iReceiver)
-{
-    static CURL:cSession; cSession = curl_easy_init();
-
-    if(!cSession) return;
-
-    static iData[70]; 
-
-    iData[0] = fopen(ConfigFile, "w");
-
-    iData[1] = iSender; iData[2] = iReceiver;
-    format(iData[3], charsmax(iData), szMsgType);
-
-    curl_easy_setopt(cSession, CURLOPT_BUFFERSIZE, 1024);
-
-    remove_quotes(szText);
-    trim(szText);
+{   
+    remove_quotes(szText); trim(szText);
 
     static szEncodedText[193]; StringURLEncode(szText, szEncodedText, charsmax(szEncodedText));
- 
-    static szBuffer[500];
-    format(szBuffer, charsmax(szBuffer), "%s?sl=%s&tl=%s&text=%s", TRANSLATOR_FILE, szLangFrom, szLangTo, szEncodedText);
 
-    curl_easy_setopt(cSession, CURLOPT_URL, szBuffer);
-    curl_easy_setopt(cSession, CURLOPT_WRITEDATA, iData[0]);
-    curl_easy_setopt(cSession, CURLOPT_WRITEFUNCTION, "write");
-    curl_easy_perform(cSession, "OnCURL_Vinculation_Perform", iData, sizeof(iData));
-} 
+    static szBuffer[600];
+    format(szBuffer, charsmax(szBuffer), "%s?sl=%s&tl=%s&text=%s&id=%d&id2=%d&msgtype=%s", 
+    TRANSLATOR_FILE, szLangFrom, szLangTo, szEncodedText, iSender, iReceiver, szMsgType[1]);
 
-public write(const data[], size, nmemb, file)
-{
-    new iCurrentSize = size * nmemb;
-    fwrite_blocks(file, data, iCurrentSize, BLOCK_CHAR );
-    return iCurrentSize;
+    grip_request(
+        szBuffer,
+        Empty_GripBody,
+        GripRequestTypeGet,
+        "ReqTranslation"
+    );
 }
 
-public OnCURL_Vinculation_Perform(const CURL:CURL, const CURLcode:szCode, const cData[ ] )
+public ReqTranslation()
 {
-    if(szCode == CURLE_WRITE_ERROR) server_print("Ocurrio un problema al realizar la traduccion");
+    static GripResponseState:responseState; responseState = grip_get_response_state();
 
-    fclose(cData[0]);
-    curl_easy_cleanup(CURL);
-
-    static iFile; iFile = fopen(ConfigFile, "r");
-    static szDataSay[200];
-
-    while(!feof(iFile))
+    if(responseState != GripResponseStateSuccessful)
     {
-        fgets(iFile, szDataSay, charsmax(szDataSay));
-
-        if(szDataSay[0] == '{' || szDataSay[0] == '}' || szDataSay[0] == ' ' || equal(szDataSay, "response") || equal(szDataSay, "players") || equal(szDataSay, "0")){
-            szDataSay[0] = EOS;
-            continue;
-        }
+        server_print("Response Status Faild: [ %d ]", responseState);
+        return;
     }
 
-    fclose( iFile );
+    static GripHTTPStatus:status; status = grip_get_response_status_code();
+    if (status != GripHTTPStatusOk)
+    {
+        server_print("Status Code: [ %d ]", status);
+        return;
+    }
 
-    if(!szDataSay[0]) return;
+    static szResponse[1024];
+    
+    static GripJSONValue:responseBody; responseBody = grip_json_parse_response_body(szResponse, charsmax(szResponse));
+    
+    if(responseBody == Invalid_GripJSONValue)
+    {
+        server_print("JSON Invalido: [ %d ]", Invalid_GripJSONValue);
+        return;
+    }
 
-    static iSender; iSender = cData[1]; 
-    static iReceiver; iReceiver = cData[2];
+    static szId[6];
 
-    static szMsgType[64]; format(szMsgType, sizeof(szMsgType), "%s", cData[3]);
-            
+    static GripJSONValue:jValue; jValue = grip_json_object_get_value(responseBody, "sender");
+    grip_json_get_string(jValue, szId, charsmax(szId));
+    grip_destroy_json_value(jValue);
+
+    static iSender; iSender = str_to_num(szId);
+
+    jValue = grip_json_object_get_value(responseBody, "receiver");
+    grip_json_get_string(jValue, szId, charsmax(szId));
+    grip_destroy_json_value(jValue);
+
+    static iReceiver; iReceiver = str_to_num(szId);
+
+    if(iSender <= 0 || iReceiver <= 0){
+        server_print("Emisor o Receptor no válido: %d & %d", iSender, iReceiver);
+        grip_destroy_json_value(responseBody);
+        return;
+    }
+
+    static szMsgType[64];
+    jValue = grip_json_object_get_value(responseBody, "msgtype");
+    grip_json_get_string(jValue, szMsgType, charsmax(szMsgType));
+    grip_destroy_json_value(jValue);
+
+    format(szMsgType, charsmax(szMsgType), "#%s", szMsgType);
+
+    static szDataSay[192]; 
+    jValue = grip_json_object_get_value(responseBody, "text");
+    grip_json_get_string(jValue, szDataSay, charsmax(szDataSay));
+    grip_destroy_json_value(jValue);
+
+    grip_destroy_json_value(responseBody);
+
     static szLangFrom[3], szLangTo[3];
     engfunc(EngFunc_InfoKeyValue, engfunc(EngFunc_GetInfoKeyBuffer, iSender), "lang", szLangFrom, sizeof(szLangFrom)-1);
     engfunc(EngFunc_InfoKeyValue, engfunc(EngFunc_GetInfoKeyBuffer, iReceiver), "lang", szLangTo, sizeof(szLangTo)-1);
@@ -159,6 +192,10 @@ public OnCURL_Vinculation_Perform(const CURL:CURL, const CURLcode:szCode, const 
 
     if(equal(szLangFrom, "")) copy(szLangFrom, sizeof(szLangFrom), "EN");
     else if(equal(szLangTo, "")) copy(szLangTo, sizeof(szLangTo), "EN");
+
+    replace_all(szDataSay, charsmax(szDataSay), "%", "");
+
+    format(szDataSay, sizeof(szDataSay), "[%s->%s] %s^r^n", szLangFrom, szLangTo, szDataSay);
                         
     message_begin(MSG_ONE, g_msgSayText, _, iReceiver);
     write_byte(iSender);
@@ -167,7 +204,9 @@ public OnCURL_Vinculation_Perform(const CURL:CURL, const CURLcode:szCode, const 
     write_string(szDataSay);
     message_end();
 
-    server_print("TEST %s", szDataSay);
+    iSender = 0;
+    iReceiver = 0;
+    szDataSay[0] = '^0';
 }
 
 stock StringURLEncode( const szInput[ ], szOutput[ ], const iLen )

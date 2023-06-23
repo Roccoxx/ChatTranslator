@@ -1,11 +1,12 @@
-﻿<?php 
+<?php 
 $sl = $_GET['sl'];
 $tl = $_GET['tl'];
 $text = $_GET['text'];
 
 $text = str_replace(' ', '%20', $text);
 
-$url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=$sl&tl=$tl&dt=t&q=$text";
+//$url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=$sl&tl=$tl&dt=t&q=$text";
+$url = "https://clients5.google.com/translate_a/t?client=dict-chrome-ex&sl=$sl&tl=$tl&dt=t&q=$text";
 
 $contents = file_get_contents($url);
 if(!$contents)
@@ -14,9 +15,10 @@ if(!$contents)
 }
 $contents = utf8_encode($contents);
 
-$data=json_decode($contents);
-
-$result=$data[0][0][0];
+//$data=json_decode($contents);
+$data=json_decode($contents, true);
+// $result=$data[0][0][0];
+$result= $data['sentences'][0]['trans'];
 
 $result = utf8_decode($result);
 
@@ -280,5 +282,12 @@ else if(strcasecmp($tl, 'lt') == 0)
 		return $string;
 	}
 
-echo $result;
+$myObj = array("sender"=> $_GET['id'],
+            "receiver" => $_GET['id2'],
+            "msgtype" => $_GET['msgtype'],
+            "text" => $result);
+
+$myJSON = json_encode($myObj);
+
+echo $myJSON;
 ?>
