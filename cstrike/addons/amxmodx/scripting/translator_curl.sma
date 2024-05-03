@@ -51,7 +51,7 @@ public plugin_init()
 public LangMenuEntity(const iEnt)
 {
     if (!is_valid_ent(iEnt))
-    	return HAM_IGNORED;
+    	return;
 
     static szLanguage[4];
     static iId;
@@ -66,7 +66,6 @@ public LangMenuEntity(const iEnt)
     }
     
     entity_set_float(iEnt, EV_FL_nextthink, get_gametime() + 1.2);
-    return HAM_IGNORED;
 }
 
 public SayTextMessage(iMsgID, iDest, iReceiver)
