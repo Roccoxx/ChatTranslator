@@ -23,4 +23,4 @@ Consideré dos opciones, cURL y gRIP para realizar este plugin. Disfrutalo!
 ## TraductorChatGRIP.php
 
 # Spanish thread for discussion
-## https://amxmodx-es.com/Thread-Traductor
+## https://amxmodx-es.com/showthread.php?tid=22378
