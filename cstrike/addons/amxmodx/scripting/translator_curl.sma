@@ -15,31 +15,24 @@
 
 #define MSG_TYPE_SIZE 64
 
-// Don't change pls
+// Don't change this pls
 #define MAX_RESPONSE_WAIT_TIME 7
 
 #pragma semicolon 1
 
 new const PLUGIN_NAME[] = "Chat Translator";
-new const PLUGIN_VERSION[] = "1.1";
+new const PLUGIN_VERSION[] = "1.1.1";
 new const PLUGIN_AUTHOR[] = "Roccoxx & hlstriker";
 
 new g_msgSayText;
 
-// cURL version (experimental)
-// Change code logic
-// Code improvements
-// fixed possibles index of bounds exception
-// API Request Optimization: Now 1 request par languaje, before: 1 request per receiver.
-// Removed PHP File Requierement
-
-// Remover el requisito de un php thanks blabla for the idea
-// obtener los usuarios con ese idioma y enviarles el mensaje traducido, entonces solo es una petición, citar el mensaje del tipo que dijo esto del consumo propio y decir que me dió una idea para implementar esto
-
 new bool:g_bIsInTranslation[33][33];
 new Trie:g_tUserTranslations; // key userid+languageToTranslate
 
-public plugin_init(){
+new const szClassNameEntPijuda[] = "EntityPijuda";
+
+public plugin_init()
+{
     register_plugin(PLUGIN_NAME, PLUGIN_VERSION, PLUGIN_AUTHOR);
 
     g_msgSayText = get_user_msgid("SayText");
@@ -47,14 +40,16 @@ public plugin_init(){
 
     new iEnt = create_entity("info_target");
     if (is_valid_ent(iEnt)){
-        RegisterHamFromEntity(Ham_Think, iEnt, "LangMenuEntity");
-        entity_set_float(iEnt,EV_FL_nextthink,get_gametime( ) + 5.0);
+        entity_set_string(iEnt, EV_SZ_classname, szClassNameEntPijuda);
+        register_think(szClassNameEntPijuda, "LangMenuEntity");
+        entity_set_float(iEnt, EV_FL_nextthink, get_gametime() + 5.0);
     }
 
     g_tUserTranslations = TrieCreate();
 }
 
-public LangMenuEntity(const iEnt){
+public LangMenuEntity(const iEnt)
+{
     if (!is_valid_ent(iEnt))
     	return HAM_IGNORED;
 
