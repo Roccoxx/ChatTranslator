@@ -25,7 +25,7 @@ enum (+=100) {
 // Don't change this pls
 #define MAX_RESPONSE_WAIT_TIME 7
 
-new bool:g_bBlockTranslationMessageSended[33];
+new bool:g_bBlockTranslationMessageSent[33];
 new bool:g_bInTranslation[33];
 
 new Trie:g_tUserTranslations; // key userid+languageToTranslate
@@ -86,9 +86,9 @@ public SayTextMessage(iMsgID, iDest, iReceiver)
 	iSender = get_msg_arg_int(1);
 
 	if (g_bInTranslation[iSender]) {
-		if (!g_bBlockTranslationMessageSended[iSender]) {
+		if (!g_bBlockTranslationMessageSent[iSender]) {
 			client_print_color(iSender, iSender, "^4[TRANSLATOR]^1 Wait, your latest message is until in translation...");
-			g_bBlockTranslationMessageSended[iSender] = true;
+			g_bBlockTranslationMessageSent[iSender] = true;
 		}
 
 		return PLUGIN_HANDLED;
@@ -227,7 +227,7 @@ RemoveUserTranslations(const iSender)
 	TrieIterDestroy(iter);
 
 	g_bInTranslation[iSender] = false;
-	g_bBlockTranslationMessageSended[iSender] = false;
+	g_bBlockTranslationMessageSent[iSender] = false;
 }
 
 public CURLVinculationPerform(const CURL:CURL, const CURLcode:code, const cData[ ] )
@@ -374,7 +374,7 @@ AllTranslationsDone(const iSender)
 	remove_task(iSender+TASK_BLOCK_NEXT_TRANSLATION);
 
 	g_bInTranslation[iSender] = false;
-	g_bBlockTranslationMessageSended[iSender] = false;
+	g_bBlockTranslationMessageSent[iSender] = false;
 }
 
 bool:UserHasTranslationInProgress(const iSender)
