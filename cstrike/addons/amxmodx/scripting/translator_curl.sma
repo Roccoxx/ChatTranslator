@@ -6,30 +6,33 @@
 #include <curl>
 #include <json>
 
-#define IsPlayer(%0)            (1 <= %0 <= MAX_PLAYERS)
+#pragma semicolon 1
 
-#define GetPlayerBit(%0,%1)     (IsPlayer(%1) && (%0 & (1 << (%1 & 31))))
-#define SetPlayerBit(%0,%1)     (IsPlayer(%1) && (%0 |= (1 << (%1 & 31))))
-#define ClearPlayerBit(%0,%1)   (IsPlayer(%1) && (%0 &= ~(1 << (%1 & 31))))
-#define SwitchPlayerBit(%0,%1)  (IsPlayer(%1) && (%0 ^= (1 << (%1 & 31))))
+new const PLUGIN_NAME[] = "Chat Translator";
+new const PLUGIN_VERSION[] = "1.1.3";
+new const PLUGIN_AUTHOR[] = "Roccoxx & hlstriker";
 
 #define MSG_TYPE_SIZE 64
+
+enum (+=100) {
+	TASK_BLOCK_NEXT_TRANSLATION = 6969,
+	TASK_REMOVE_TRANSLATIONS
+}
+
+#define ID_BLOCK_TRANSLATION (taskid - TASK_BLOCK_NEXT_TRANSLATION)
+#define ID_REMOVE_TRANSLATIONS (taskid - TASK_REMOVE_TRANSLATIONS)
 
 // Don't change this pls
 #define MAX_RESPONSE_WAIT_TIME 7
 
-#pragma semicolon 1
+new bool:g_bBlockTranslationMessageSended[33];
+new bool:g_bInTranslation[33];
 
-new const PLUGIN_NAME[] = "Chat Translator";
-new const PLUGIN_VERSION[] = "1.1.1";
-new const PLUGIN_AUTHOR[] = "Roccoxx & hlstriker";
-
-new g_msgSayText;
-
-new bool:g_bIsInTranslation[33][33];
 new Trie:g_tUserTranslations; // key userid+languageToTranslate
 
 new const szClassNameEntPijuda[] = "EntityPijuda";
+
+new g_msgSayText;
 
 public plugin_init()
 {
@@ -73,21 +76,25 @@ public SayTextMessage(iMsgID, iDest, iReceiver)
 	if (!is_user_connected(iReceiver)) 
 		return PLUGIN_CONTINUE;
 
-	static iSender; 
-	iSender = get_msg_arg_int(1);
-
-	if(iSender == iReceiver) 
-		return PLUGIN_CONTINUE;
-
-	if (g_bIsInTranslation[iSender][iReceiver]) {
-		client_print_color(iSender, iSender, "^4[TRANSLATOR]^1 Wait, your latest message is until in translation...");
-		return PLUGIN_CONTINUE;
-	}
-
 	static szText[193]; 
 	get_msg_arg_string(4, szText, charsmax(szText));
 
 	if(szText[0] == '/') 
+		return PLUGIN_CONTINUE;
+
+	static iSender; 
+	iSender = get_msg_arg_int(1);
+
+	if (g_bInTranslation[iSender]) {
+		if (!g_bBlockTranslationMessageSended[iSender]) {
+			client_print_color(iSender, iSender, "^4[TRANSLATOR]^1 Wait, your latest message is until in translation...");
+			g_bBlockTranslationMessageSended[iSender] = true;
+		}
+
+		return PLUGIN_HANDLED;
+	}
+
+	if(iSender == iReceiver) 
 		return PLUGIN_CONTINUE;
 
 	static szLangFrom[3], szLangTo[3];
@@ -101,6 +108,7 @@ public SayTextMessage(iMsgID, iDest, iReceiver)
 	if (equal(szLangFrom, "mk") || equal(szLangFrom, "ls") || equal(szLangFrom, "sr") || equal(szLangFrom, "bg")) 
 		return PLUGIN_CONTINUE;
 
+	/* Start translation functions */
 	/* If players don't have a language set it to english */
 	if (equal(szLangFrom, "")) 
 		copy(szLangFrom, charsmax(szLangFrom), "en");
@@ -122,25 +130,24 @@ public SayTextMessage(iMsgID, iDest, iReceiver)
 	if (equal(szLangTo, "cz")) 
 		copy(szLangTo, charsmax(szLangTo), "cs");
 
+	static szUserKey[10];
+	formatex(szUserKey, charsmax(szUserKey), "%d %s", iSender, szLangTo);
+	
+	if (TrieKeyExists(g_tUserTranslations, szUserKey))
+		return PLUGIN_HANDLED;
+
 	static szMsgType[MSG_TYPE_SIZE];
 	get_msg_arg_string(2, szMsgType, charsmax(szMsgType));
 
-	TranslateText(szText, szMsgType, szLangFrom, szLangTo, iSender, iReceiver);
-
+	TranslateText(szText, szMsgType, szLangFrom, szLangTo, iSender, szUserKey);
 	return PLUGIN_HANDLED;
 }
 
-TranslateText(szText[193], const szMsgType[MSG_TYPE_SIZE], const szLangFrom[3], const szLangTo[3], iSender, iReceiver)
+TranslateText(szText[193], const szMsgType[MSG_TYPE_SIZE], const szLangFrom[3], const szLangTo[3], iSender, const szUserKey[])
 {
 	static CURL:cSession; cSession = curl_easy_init();
 
 	if (!cSession) 
-		return;
-
-	static szUserKey[10];
-	formatex(szUserKey, charsmax(szUserKey), "%d %s", iSender, szLangTo);
-
-	if (TrieKeyExists(g_tUserTranslations, szUserKey))
 		return;
 
 	TrieSetCell(g_tUserTranslations, szUserKey, iSender);
@@ -153,7 +160,7 @@ TranslateText(szText[193], const szMsgType[MSG_TYPE_SIZE], const szLangFrom[3], 
 	iFile = fopen(szConfigFile, "w");
 
 	static szData[MAX_FMT_LENGTH];
-	format(szData, charsmax(szData), "%d %d %d %s %s %s", iSender, iReceiver, iFile, szLangFrom, szLangTo, szMsgType);
+	format(szData, charsmax(szData), "%d %d %s %s %s", iSender, iFile, szLangFrom, szLangTo, szMsgType);
 
 	static szEncodedText[193]; 
 	remove_quotes(szText);
@@ -170,8 +177,11 @@ TranslateText(szText[193], const szMsgType[MSG_TYPE_SIZE], const szLangFrom[3], 
 	curl_easy_setopt(cSession, CURLOPT_EXPECT_100_TIMEOUT_MS, MAX_RESPONSE_WAIT_TIME);
 	curl_easy_perform(cSession, "CURLVinculationPerform", szData, charsmax(szData));
 
-	remove_task(iSender);
-	set_task(float(MAX_RESPONSE_WAIT_TIME), "RemoveUserTranslations", iSender);
+	remove_task(iSender+TASK_REMOVE_TRANSLATIONS);
+	set_task(float(MAX_RESPONSE_WAIT_TIME), "RemoveUserTranslationsTask", iSender+TASK_REMOVE_TRANSLATIONS);
+
+	remove_task(iSender+TASK_BLOCK_NEXT_TRANSLATION);
+	set_task(0.3, "BlockNextUserTranslationTask", iSender+TASK_BLOCK_NEXT_TRANSLATION);
 }
 
 public WriteTranslation(const data[], size, nmemb, file)
@@ -183,11 +193,19 @@ public WriteTranslation(const data[], size, nmemb, file)
 
 public client_disconnected(iId, bool:drop, message[], maxlen)
 {
-	remove_task(iId);
+	remove_task(iId+TASK_REMOVE_TRANSLATIONS);
+	remove_task(iId+TASK_BLOCK_NEXT_TRANSLATION);
+
 	RemoveUserTranslations(iId);
 }
 
-public RemoveUserTranslations(const iSender)
+public BlockNextUserTranslationTask(taskid)
+	g_bInTranslation[ID_BLOCK_TRANSLATION] = true;
+
+public RemoveUserTranslationsTask(taskid)
+	RemoveUserTranslations(ID_REMOVE_TRANSLATIONS);
+
+RemoveUserTranslations(const iSender)
 {
 	new szUserId[5];
 	num_to_str(iSender, szUserId, charsmax(szUserId));
@@ -208,16 +226,16 @@ public RemoveUserTranslations(const iSender)
 
 	TrieIterDestroy(iter);
 
-	arrayset(g_bIsInTranslation[iSender], false, 33);
+	g_bInTranslation[iSender] = false;
+	g_bBlockTranslationMessageSended[iSender] = false;
 }
 
 public CURLVinculationPerform(const CURL:CURL, const CURLcode:code, const cData[ ] )
 {
-	static szSenderIndex[5], szReceiverIndex[5], szFileHandler[20], szLangFrom[3], szLangTo[3], szMsgType[MSG_TYPE_SIZE];
+	static szSenderIndex[5], szFileHandler[20], szLangFrom[3], szLangTo[3], szMsgType[MSG_TYPE_SIZE];
     
 	parse(cData, 
-		szSenderIndex, charsmax(szSenderIndex), 
-		szReceiverIndex, charsmax(szReceiverIndex), 
+		szSenderIndex, charsmax(szSenderIndex),
 		szFileHandler, charsmax(szFileHandler), 
 		szLangFrom, charsmax(szLangFrom),
 		szLangTo, charsmax(szLangTo),
@@ -231,13 +249,13 @@ public CURLVinculationPerform(const CURL:CURL, const CURLcode:code, const cData[
 	static iSender; 
 	iSender = str_to_num(szSenderIndex); 
 
-	static iOriginalReceiver; 
-	iOriginalReceiver = str_to_num(szSenderIndex); 
+	if (!is_user_connected(iSender)) {
+		curl_easy_cleanup(CURL);
+		return;
+	}
 
 	static szUserKey[10];
 	formatex(szUserKey, charsmax(szUserKey), "%d %s", iSender, szLangTo);
-
-	g_bIsInTranslation[iSender][iOriginalReceiver] = false;
 
 	if (!TrieKeyExists(g_tUserTranslations, szUserKey)) {
 		curl_easy_cleanup(CURL);
@@ -245,11 +263,6 @@ public CURLVinculationPerform(const CURL:CURL, const CURLcode:code, const cData[
 	}
 
 	TrieDeleteKey(g_tUserTranslations, szUserKey);
-
-	if (!is_user_connected(iSender)) {
-		curl_easy_cleanup(CURL);
-		return;
-	}
 
 	if (code == CURLE_WRITE_ERROR) {
 		server_print("Write Translation problem");
@@ -349,9 +362,46 @@ SendTranslation(const iSender, szLangFrom[3], szLangTo[3], szMsgType[MSG_TYPE_SI
 			write_string(szDataSay);
 			message_end();
         }
+	}
 
-		g_bIsInTranslation[iSender][iReceiver] = false;
-    }
+	if (!UserHasTranslationInProgress(iSender))
+        AllTranslationsDone(iSender);
+}
+
+AllTranslationsDone(const iSender)
+{
+	remove_task(iSender+TASK_REMOVE_TRANSLATIONS);
+	remove_task(iSender+TASK_BLOCK_NEXT_TRANSLATION);
+
+	g_bInTranslation[iSender] = false;
+	g_bBlockTranslationMessageSended[iSender] = false;
+}
+
+bool:UserHasTranslationInProgress(const iSender)
+{
+	new bool:bHasTranslations = false;
+	new szUserId[5];
+	num_to_str(iSender, szUserId, charsmax(szUserId));
+
+	new TrieIter:iter = TrieIterCreate(g_tUserTranslations);{
+		new szKey[32], szValue[5];
+
+		while (!TrieIterEnded(iter)){
+			TrieIterGetKey(iter, szKey, charsmax(szKey));
+			TrieIterGetString(iter, szValue, charsmax(szValue));
+
+			if (equal(szValue, szUserId)) {
+				bHasTranslations = true;
+				break;
+			}
+
+			TrieIterNext(iter);
+		}
+	}
+
+	TrieIterDestroy(iter);
+
+	return bHasTranslations;
 }
 
 format_translation(szTranslation[193], const szLangTo[3])
