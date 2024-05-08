@@ -16,7 +16,7 @@ Consideré dos opciones, cURL y gRIP para realizar este plugin. Disfrutalo!
 
 # cURL version Requerimientos/Requirements
 ## https://github.com/Polarhigh/AmxxCurl
-## TraductorChat.php
+## For Old version use the file TraductorChat.php
 
 # gRIP version Requerimientos/Requirements
 ## https://github.com/In-line/grip or https://dev-cs.ru/resources/650/
